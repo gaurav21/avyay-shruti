@@ -1,0 +1,88 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.pytest_cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Documentation
+README.md
+docs/
+*.md
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ŚRUTI specific
+knowledge_base/
+*.mp3
+*.wav
+*.mp4
+*.avi
+*.mkv
+*.flv
+*.webm
+*.aac
+*.ogg
+*.wma
+*.m4a
+
+# Environment files
+.env
+.env.*
+.venv/
+venv/
+
+# Tests and CI
+tests/
+.github/
+.gitignore
+.dockerignore
+
+# Development files
+scripts/
+examples/
+notebooks/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
