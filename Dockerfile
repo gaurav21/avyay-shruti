@@ -16,6 +16,9 @@ COPY shruti/ shruti/
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir .
 
+# Pre-download the embedding model at build time so startup is fast
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+
 # Create volume for Chroma persistence
 VOLUME /data/knowledge_base
 ENV CHROMA_PERSIST_DIR=/data/knowledge_base
