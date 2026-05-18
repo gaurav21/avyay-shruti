@@ -25,9 +25,7 @@ coverage.xml
 .hypothesis
 
 # Documentation
-README.md
 docs/
-*.md
 
 # OS generated files
 .DS_Store

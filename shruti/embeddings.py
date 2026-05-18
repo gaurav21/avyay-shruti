@@ -10,8 +10,8 @@ from typing import Dict, List, Optional, Union
 
 from chromadb import PersistentClient
 from chromadb.config import Settings
-from langchain.docstore.document import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 

@@ -9,11 +9,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy project files
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 COPY shruti/ shruti/
 
-# Install the package
-RUN pip install --no-cache-dir .
+# Install CPU-only PyTorch first (avoids ~2GB CUDA download), then the package
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir .
 
 # Create volume for Chroma persistence
 VOLUME /data/knowledge_base
