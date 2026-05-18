@@ -12,6 +12,12 @@ from fastapi.responses import JSONResponse
 
 from . import __version__
 from .config import get_config, validate_config, setup_directories
+from .middleware import (
+    RateLimitMiddleware,
+    ALLOWED_ORIGINS,
+    TIER_LIMITS,
+    Tier,
+)
 from .models import (
     TranscribeRequest, TranscribeResponse,
     ExtractRequest, ExtractResponse,
@@ -43,12 +49,29 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Rate limiting middleware (applied first, before CORS)
+app.add_middleware(RateLimitMiddleware)
+
+# CORS — restricted to Avyay domains (not wildcard)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "X-API-Key",
+        "X-ReCAPTCHA-Token",
+        "Content-Type",
+        "Accept",
+    ],
+    expose_headers=[
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Reset",
+        "X-RateLimit-Tier",
+        "Retry-After",
+    ],
 )
 
 
@@ -78,7 +101,7 @@ async def startup_event():
         raise
 
 
-@app.get("/", response_model=Dict[str, str])
+@app.get("/", response_model=Dict[str, Any])
 async def root():
     """Root endpoint with basic information."""
     return {
@@ -86,7 +109,11 @@ async def root():
         "version": __version__,
         "description": "Multilingual YouTube Knowledge Extractor",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "rate_limits": {
+            tier.value: f"{limit} req/hour"
+            for tier, limit in TIER_LIMITS.items()
+        },
     }
 
 
