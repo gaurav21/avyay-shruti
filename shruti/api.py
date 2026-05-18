@@ -93,9 +93,17 @@ async def global_exception_handler(request, exc):
 async def startup_event():
     """Initialize the application on startup."""
     try:
-        validate_config()
         setup_directories()
-        logger.info("ŚRUTI API server started successfully")
+        # Don't validate GROQ_API_KEY on startup — it's only needed for
+        # transcription/extraction endpoints, not health checks.
+        # This allows the container to start and serve /health even
+        # if the API key isn't configured yet.
+        try:
+            validate_config()
+            logger.info("ŚRUTI API server started successfully (config valid)")
+        except ValueError as e:
+            logger.warning(f"Config validation warning (non-fatal): {e}")
+            logger.info("ŚRUTI API server started (some features may be unavailable)")
     except Exception as e:
         logger.error(f"Failed to start server: {e}")
         raise
