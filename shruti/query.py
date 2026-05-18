@@ -56,7 +56,8 @@ def query_knowledge(
                 "answer": "I couldn't find any relevant information in the knowledge base to answer your question. Please try rephrasing your question or check if the content has been ingested.",
                 "sources": [],
                 "confidence": "low",
-                "chunks_found": 0
+                "chunks_found": 0,
+                "avg_similarity": 0.0,
             }
         
         # Step 2: Prepare context for LLM
@@ -70,28 +71,16 @@ def query_knowledge(
             
             context_chunks.append(f"[Source {i+1}] {chunk_text}")
             
-            # Prepare source information
+            # Prepare source information matching Source model:
+            # video_id, title, chunk_text, similarity_score, timestamp, chunk_index
             source_info = {
-                "chunk_index": i + 1,
-                "text": chunk_text[:200] + "..." if len(chunk_text) > 200 else chunk_text,
+                "video_id": metadata.get("video_id", ""),
+                "title": metadata.get("title", "Unknown"),
+                "chunk_text": chunk_text[:500] + "..." if len(chunk_text) > 500 else chunk_text,
                 "similarity_score": chunk["similarity_score"],
+                "timestamp": metadata.get("timestamp"),
+                "chunk_index": metadata.get("chunk_index", i),
             }
-            
-            # Add video metadata if available
-            if "video_id" in metadata:
-                source_info["video_id"] = metadata["video_id"]
-                
-                # Create YouTube URL with timestamp if available
-                video_url = f"https://youtube.com/watch?v={metadata['video_id']}"
-                if "timestamp" in metadata:
-                    video_url += f"&t={metadata['timestamp']}s"
-                source_info["url_with_timestamp"] = video_url
-            
-            if "title" in metadata:
-                source_info["title"] = metadata["title"]
-            
-            if include_metadata:
-                source_info["full_metadata"] = metadata
             
             sources.append(source_info)
         
@@ -266,7 +255,7 @@ def batch_query_knowledge(
     return results
 
 
-def get_related_topics(topic: str, top_k: int = 10, persist_dir: Optional[str] = None) -> List[str]:
+def get_related_topics(topic: str, top_k: int = 10, persist_dir: Optional[str] = None) -> List[Dict]:
     """
     Find topics related to the given topic based on semantic similarity.
     
@@ -276,7 +265,7 @@ def get_related_topics(topic: str, top_k: int = 10, persist_dir: Optional[str] =
         persist_dir: Directory where vector database is persisted
         
     Returns:
-        List of related topic suggestions
+        List of RelatedTopic-compatible dicts with topic, relevance_score, video_count
     """
     try:
         # Search for content related to the topic
@@ -290,29 +279,44 @@ def get_related_topics(topic: str, top_k: int = 10, persist_dir: Optional[str] =
             return []
         
         # Extract topics from chunk metadata and content
-        related_topics = set()
+        # Track topic -> (best_score, video_ids)
+        topic_data: Dict[str, Dict] = {}
         
         for chunk in similar_chunks:
             metadata = chunk["metadata"]
             text = chunk["text"]
+            score = chunk["similarity_score"]
+            video_id = metadata.get("video_id", "unknown")
             
             # Add video title as a related topic
             if "title" in metadata:
                 title = metadata["title"]
-                # Clean up the title
                 clean_title = re.sub(r'[^\w\s]', '', title).strip()
                 if clean_title and len(clean_title) > 10:
-                    related_topics.add(clean_title)
+                    if clean_title not in topic_data:
+                        topic_data[clean_title] = {"score": score, "video_ids": set()}
+                    topic_data[clean_title]["video_ids"].add(video_id)
+                    topic_data[clean_title]["score"] = max(topic_data[clean_title]["score"], score)
             
             # Extract key phrases from text (simple heuristic)
-            # Look for capitalized phrases that might be topics
             phrases = re.findall(r'[A-Z][a-z]+(?: [A-Z][a-z]+)*', text)
-            for phrase in phrases[:3]:  # Limit to avoid noise
+            for phrase in phrases[:3]:
                 if len(phrase) > 5 and phrase.lower() not in topic.lower():
-                    related_topics.add(phrase)
+                    if phrase not in topic_data:
+                        topic_data[phrase] = {"score": score, "video_ids": set()}
+                    topic_data[phrase]["video_ids"].add(video_id)
+                    topic_data[phrase]["score"] = max(topic_data[phrase]["score"], score)
         
-        # Convert to list and limit results
-        return list(related_topics)[:5]
+        # Convert to RelatedTopic-compatible dicts
+        results = []
+        for t, data in sorted(topic_data.items(), key=lambda x: x[1]["score"], reverse=True)[:5]:
+            results.append({
+                "topic": t,
+                "relevance_score": data["score"],
+                "video_count": len(data["video_ids"]),
+            })
+        
+        return results
         
     except Exception as e:
         logger.error(f"Error finding related topics: {e}")
@@ -333,7 +337,7 @@ def search_by_metadata(
         persist_dir: Directory where vector database is persisted
         
     Returns:
-        List of matching chunks
+        List of MetadataSearchResult-compatible dicts
     """
     try:
         vectorstore = load_vectorstore(persist_dir)
@@ -345,11 +349,14 @@ def search_by_metadata(
             filter=metadata_filter
         )
         
-        # Format results
+        # Format results matching MetadataSearchResult model
         formatted_results = []
         for doc in results[:limit]:
             formatted_results.append({
-                "text": doc.page_content,
+                "video_id": doc.metadata.get("video_id", ""),
+                "title": doc.metadata.get("title", "Unknown"),
+                "chunk_text": doc.page_content,
+                "chunk_index": doc.metadata.get("chunk_index", 0),
                 "metadata": doc.metadata,
             })
         

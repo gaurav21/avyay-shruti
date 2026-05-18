@@ -40,11 +40,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy"]
+dev = ["pytest", "pytest-asyncio", "httpx", "ruff", "mypy"]
 local = ["openai-whisper", "torch"]
 
 [project.scripts]
-shruti = "shruti.cli:main"
+shruti = "shruti.cli:cli"
 
 [project.urls]
 Homepage = "https://avyay.ai/products/shruti"

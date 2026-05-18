@@ -234,10 +234,12 @@ def query(question, top_k, persist_dir, output_format, include_sources):
                     click.echo(f"\n[{i}] {source.get('title', 'Unknown Title')}")
                     if 'video_id' in source:
                         click.echo(f"    Video ID: {source['video_id']}")
-                    if 'url_with_timestamp' in source:
-                        click.echo(f"    URL: {source['url_with_timestamp']}")
+                        video_url = f"https://youtube.com/watch?v={source['video_id']}"
+                        if source.get('timestamp'):
+                            video_url += f"&t={int(source['timestamp'])}s"
+                        click.echo(f"    URL: {video_url}")
                     click.echo(f"    Similarity: {source['similarity_score']:.3f}")
-                    click.echo(f"    Text: {source['text']}")
+                    click.echo(f"    Text: {source.get('chunk_text', '')}")
         
     except Exception as e:
         click.echo(f"❌ Error querying knowledge base: {e}", err=True)
