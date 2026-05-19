@@ -182,3 +182,142 @@ class MetadataSearchResponse(BaseModel):
     results: List[MetadataSearchResult] = Field(..., description="Search results")
     total_found: int = Field(..., description="Total number of results found")
     filters_applied: Dict[str, Any] = Field(..., description="Filters that were applied")
+
+
+# ===== V2.0 Multi-Modal Models =====
+
+class VisualSlideText(BaseModel):
+    """OCR-extracted text from a video frame."""
+    timestamp: float = Field(..., description="Timestamp in seconds")
+    text: str = Field(..., description="Extracted text")
+    confidence: float = Field(..., description="OCR confidence")
+    language: Optional[str] = Field(None, description="Detected language")
+
+
+class DiagramDetail(BaseModel):
+    """Detected diagram information."""
+    timestamp: float = Field(..., description="Timestamp in seconds")
+    diagram_type: str = Field(..., description="Diagram classification")
+    description: str = Field(..., description="Description of the diagram")
+    confidence: float = Field(0.0, description="Detection confidence")
+
+
+class VisualAnalysisResponse(BaseModel):
+    """Response model for visual analysis."""
+    frames_extracted: int = Field(..., description="Number of frames analyzed")
+    unique_slides: int = Field(..., description="Number of unique slides found")
+    slide_texts: List[VisualSlideText] = Field(..., description="OCR-extracted texts")
+    diagrams: List[DiagramDetail] = Field(..., description="Detected diagrams")
+    scene_changes: int = Field(..., description="Number of scene changes")
+    visual_summary: str = Field(..., description="Summary of visual analysis")
+
+
+class SpeakerProfileModel(BaseModel):
+    """Speaker profile information."""
+    speaker_id: str = Field(..., description="Speaker identifier")
+    speaker_label: Optional[str] = Field(None, description="Human-readable label")
+    total_duration: float = Field(..., description="Total speaking time (seconds)")
+    speaking_ratio: float = Field(..., description="Ratio of total duration")
+    segment_count: int = Field(..., description="Number of speech segments")
+
+
+class EmotionSummary(BaseModel):
+    """Summary of emotion analysis."""
+    dominant_emotion: str = Field(..., description="Most frequent emotion")
+    emotion_distribution: Dict[str, int] = Field(..., description="Emotion counts")
+    avg_sentiment_score: float = Field(..., description="Average sentiment score")
+    overall_sentiment: str = Field(..., description="Overall sentiment: positive/negative/neutral")
+
+
+class SpeakerAnalysisResponse(BaseModel):
+    """Response model for speaker analysis."""
+    total_speakers: int = Field(..., description="Number of detected speakers")
+    dominant_speaker: Optional[str] = Field(None, description="Dominant speaker ID")
+    speakers: List[SpeakerProfileModel] = Field(..., description="Speaker profiles")
+    emotions: Optional[EmotionSummary] = Field(None, description="Emotion analysis summary")
+
+
+class TopicModel(BaseModel):
+    """A detected topic segment."""
+    topic_id: int = Field(..., description="Topic identifier")
+    title: str = Field(..., description="Topic title")
+    keywords: List[str] = Field(..., description="Top keywords")
+    start_time: float = Field(..., description="Start time (seconds)")
+    end_time: float = Field(..., description="End time (seconds)")
+    summary: str = Field("", description="Topic summary")
+
+
+class ChapterModel(BaseModel):
+    """An auto-detected chapter."""
+    chapter_id: int = Field(..., description="Chapter identifier")
+    title: str = Field(..., description="Chapter title")
+    start_time: float = Field(..., description="Start time (seconds)")
+    end_time: float = Field(..., description="End time (seconds)")
+    duration: float = Field(..., description="Duration (seconds)")
+    summary: str = Field("", description="Chapter summary")
+
+
+class SegmentationResponse(BaseModel):
+    """Response model for content segmentation."""
+    total_topics: int = Field(..., description="Number of detected topics")
+    total_chapters: int = Field(..., description="Number of detected chapters")
+    avg_topic_duration: float = Field(..., description="Average topic duration")
+    topics: List[TopicModel] = Field(..., description="Detected topics")
+    chapters: List[ChapterModel] = Field(..., description="Detected chapters")
+    content_flow: List[str] = Field(..., description="Ordered topic titles")
+    youtube_chapters: Optional[str] = Field(None, description="YouTube-compatible chapter timestamps")
+
+
+class GraphEntityModel(BaseModel):
+    """Entity in the knowledge graph."""
+    name: str = Field(..., description="Entity name")
+    entity_type: str = Field(..., description="Entity type")
+    frequency: int = Field(1, description="Occurrence frequency")
+    description: str = Field("", description="Entity description")
+
+
+class KnowledgeGraphResponse(BaseModel):
+    """Response model for knowledge graph."""
+    total_entities: int = Field(..., description="Total entities")
+    total_relationships: int = Field(..., description="Total relationships")
+    total_cross_references: int = Field(..., description="Total cross-references")
+    entity_types: Dict[str, int] = Field(..., description="Entity type counts")
+    key_entities: List[GraphEntityModel] = Field(..., description="Top entities")
+    videos_covered: int = Field(0, description="Number of videos in graph")
+
+
+class CrossReferenceModel(BaseModel):
+    """Cross-reference between videos."""
+    target_video: str = Field(..., description="Target video ID")
+    shared_entities: List[str] = Field(..., description="Shared entity names")
+    similarity: float = Field(..., description="Similarity score")
+    ref_type: str = Field(..., description="Reference type")
+
+
+class MultiModalRequest(BaseModel):
+    """Request model for multi-modal analysis."""
+    url: str = Field(..., description="YouTube video URL")
+    enable_visual: bool = Field(True, description="Enable visual analysis")
+    enable_speakers: bool = Field(True, description="Enable speaker identification")
+    enable_segmentation: bool = Field(True, description="Enable topic segmentation")
+    enable_knowledge_graph: bool = Field(True, description="Enable knowledge graph")
+    enable_cross_references: bool = Field(True, description="Enable cross-references")
+    frame_interval: float = Field(5.0, description="Frame capture interval (seconds)")
+    max_frames: int = Field(200, description="Maximum frames to extract")
+
+
+class MultiModalResponse(BaseModel):
+    """Response model for multi-modal analysis."""
+    video_id: str = Field(..., description="Video identifier")
+    title: str = Field(..., description="Video title")
+    language: str = Field(..., description="Primary language")
+    knowledge: Dict[str, Any] = Field(..., description="V1 extracted knowledge")
+    visual: Optional[VisualAnalysisResponse] = Field(None, description="Visual analysis")
+    speakers: Optional[SpeakerAnalysisResponse] = Field(None, description="Speaker analysis")
+    segmentation: Optional[SegmentationResponse] = Field(None, description="Content segmentation")
+    knowledge_graph: Optional[KnowledgeGraphResponse] = Field(None, description="Knowledge graph")
+    cross_references: List[CrossReferenceModel] = Field(default_factory=list, description="Cross-references")
+    enriched_knowledge: Dict[str, Any] = Field(default_factory=dict, description="Merged enriched output")
+    pipeline_stages: Dict[str, bool] = Field(..., description="Pipeline stage status")
+    errors: List[str] = Field(default_factory=list, description="Pipeline errors")
+    processing_time_seconds: float = Field(..., description="Total processing time")

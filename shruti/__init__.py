@@ -6,7 +6,7 @@ from YouTube videos in multiple languages, with special support for Sanskrit
 and Indic languages.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "Avyay AI"
 __email__ = "team@avyay.ai"
 
@@ -22,6 +22,13 @@ __all__ = [
     "chunk_transcript",
     "store_chunks",
     "load_vectorstore",
+    # V2.0 - Multi-modal analysis
+    "analyze_multimodal",
+    "analyze_video_visuals",
+    "analyze_speakers",
+    "segment_content",
+    "build_knowledge_graph",
+    "extract_entities",
 ]
 
 # Functions will be imported when first accessed
@@ -57,5 +64,23 @@ def __getattr__(name):
     elif name == "load_vectorstore":
         from .embeddings import load_vectorstore
         return load_vectorstore
+    elif name == "analyze_multimodal":
+        from .multimodal import analyze_multimodal
+        return analyze_multimodal
+    elif name == "analyze_video_visuals":
+        from .visual import analyze_video_visuals
+        return analyze_video_visuals
+    elif name == "analyze_speakers":
+        from .speakers import analyze_speakers
+        return analyze_speakers
+    elif name == "segment_content":
+        from .segments import segment_content
+        return segment_content
+    elif name == "build_knowledge_graph":
+        from .knowledge_graph import build_knowledge_graph
+        return build_knowledge_graph
+    elif name == "extract_entities":
+        from .knowledge_graph import extract_entities
+        return extract_entities
     else:
         raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

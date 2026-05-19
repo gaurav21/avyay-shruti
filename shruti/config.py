@@ -34,6 +34,14 @@ class Config:
     # Groq Whisper Settings
     WHISPER_MODEL: str = os.getenv("WHISPER_MODEL", "whisper-large-v3")
     
+    # V2.0 Multi-Modal Settings
+    FRAME_INTERVAL: float = float(os.getenv("FRAME_INTERVAL", "5.0"))
+    MAX_FRAMES: int = int(os.getenv("MAX_FRAMES", "200"))
+    OCR_LANGUAGES: str = os.getenv("OCR_LANGUAGES", "eng+hin+san")
+    MAX_SPEAKERS: int = int(os.getenv("MAX_SPEAKERS", "10"))
+    KNOWLEDGE_GRAPH_DIR: str = os.getenv("KNOWLEDGE_GRAPH_DIR", "")
+    HUGGINGFACE_TOKEN: str = os.getenv("HUGGINGFACE_TOKEN", "")
+    
     @classmethod
     def validate(cls) -> None:
         """Validate required configuration."""

@@ -27,7 +27,11 @@ from .models import (
     DatabaseStatsResponse, HealthResponse,
     ErrorResponse, ConfigInfo,
     RelatedTopicsRequest, RelatedTopicsResponse,
-    MetadataSearchRequest, MetadataSearchResponse
+    MetadataSearchRequest, MetadataSearchResponse,
+    # V2 models
+    SegmentationResponse, TopicModel, ChapterModel,
+    KnowledgeGraphResponse, GraphEntityModel,
+    MultiModalRequest, MultiModalResponse,
 )
 from .transcribe import transcribe_url
 from .extract import extract_knowledge, extract_knowledge_batch
@@ -35,6 +39,12 @@ from .embeddings import add_video_to_vectorstore, get_database_stats
 from .query import (
     query_knowledge, batch_query_knowledge, 
     get_related_topics, search_by_metadata
+)
+from .segments import segment_content, generate_youtube_chapters
+from .knowledge_graph import (
+    extract_entities, extract_relationships,
+    build_knowledge_graph, load_knowledge_graph,
+    save_knowledge_graph, get_graph_statistics, query_graph,
 )
 
 # Configure logging
@@ -398,6 +408,206 @@ async def search_by_metadata_filters(request: MetadataSearchRequest):
     except Exception as e:
         logger.error(f"Metadata search failed: {e}")
         raise HTTPException(status_code=400, detail=f"Metadata search failed: {e}")
+
+
+# ===== V2.0 Multi-Modal Endpoints =====
+
+@app.post("/v2/segment")
+async def segment_video_content(request: ExtractRequest):
+    """Segment a video into topics and auto-detect chapters."""
+    try:
+        logger.info(f"Segmenting content from: {request.url}")
+
+        # Transcribe first
+        transcript_result = transcribe_url(request.url)
+
+        # Segment content
+        result = segment_content(
+            transcript=transcript_result["transcript"],
+            segments=transcript_result.get("segments"),
+        )
+
+        # Generate YouTube chapters
+        yt_chapters = generate_youtube_chapters(result.chapters)
+
+        return SegmentationResponse(
+            total_topics=result.total_topics,
+            total_chapters=result.total_chapters,
+            avg_topic_duration=result.avg_topic_duration,
+            topics=[
+                TopicModel(
+                    topic_id=t.topic_id,
+                    title=t.title,
+                    keywords=t.keywords[:5],
+                    start_time=t.start_time,
+                    end_time=t.end_time,
+                    summary=t.summary,
+                )
+                for t in result.topics
+            ],
+            chapters=[
+                ChapterModel(
+                    chapter_id=ch.chapter_id,
+                    title=ch.title,
+                    start_time=ch.start_time,
+                    end_time=ch.end_time,
+                    duration=ch.duration,
+                    summary=ch.summary,
+                )
+                for ch in result.chapters
+            ],
+            content_flow=result.content_flow,
+            youtube_chapters=yt_chapters,
+        )
+
+    except Exception as e:
+        logger.error(f"Segmentation failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Segmentation failed: {e}")
+
+
+@app.post("/v2/knowledge-graph")
+async def build_video_knowledge_graph(request: ExtractRequest):
+    """Build knowledge graph from a video's content."""
+    try:
+        logger.info(f"Building knowledge graph from: {request.url}")
+
+        # Transcribe
+        transcript_result = transcribe_url(request.url)
+
+        # Extract knowledge
+        knowledge = extract_knowledge(
+            transcript=transcript_result["transcript"],
+            title=transcript_result["title"],
+        )
+
+        # Extract entities and relationships
+        entities = extract_entities(
+            text=transcript_result["transcript"],
+            video_id=transcript_result["video_id"],
+            title=transcript_result["title"],
+            knowledge=knowledge,
+        )
+
+        relationships = extract_relationships(
+            entities=entities,
+            text=transcript_result["transcript"],
+            knowledge=knowledge,
+            video_id=transcript_result["video_id"],
+        )
+
+        # Load existing graph
+        config = get_config()
+        graph_path = str(config.get_chroma_persist_path() / "knowledge_graph.json")
+        existing_graph = load_knowledge_graph(graph_path)
+
+        # Build/update graph
+        graph = build_knowledge_graph(
+            entities=entities,
+            relationships=relationships,
+            existing_graph=existing_graph,
+        )
+        save_knowledge_graph(graph, graph_path)
+
+        stats = get_graph_statistics(graph)
+
+        return KnowledgeGraphResponse(
+            total_entities=stats["total_entities"],
+            total_relationships=stats["total_relationships"],
+            total_cross_references=stats["total_cross_references"],
+            entity_types=stats["entity_types"],
+            key_entities=[
+                GraphEntityModel(
+                    name=e["name"],
+                    entity_type=e["type"],
+                    frequency=e.get("connections", 1),
+                )
+                for e in stats["top_connected_entities"]
+            ],
+            videos_covered=stats["videos_covered"],
+        )
+
+    except Exception as e:
+        logger.error(f"Knowledge graph building failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Knowledge graph building failed: {e}")
+
+
+@app.get("/v2/knowledge-graph/stats")
+async def get_knowledge_graph_statistics():
+    """Get knowledge graph statistics."""
+    try:
+        config = get_config()
+        graph_path = str(config.get_chroma_persist_path() / "knowledge_graph.json")
+        graph = load_knowledge_graph(graph_path)
+
+        if not graph:
+            return {"message": "No knowledge graph found. Ingest videos first."}
+
+        return get_graph_statistics(graph)
+
+    except Exception as e:
+        logger.error(f"Knowledge graph stats failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Stats error: {e}")
+
+
+@app.get("/v2/knowledge-graph/query")
+async def query_knowledge_graph(
+    entity: str = None,
+    entity_type: str = None,
+    video_id: str = None,
+    max_depth: int = 2,
+):
+    """Query the knowledge graph for entities and relationships."""
+    try:
+        config = get_config()
+        graph_path = str(config.get_chroma_persist_path() / "knowledge_graph.json")
+        graph = load_knowledge_graph(graph_path)
+
+        if not graph:
+            return {"message": "No knowledge graph found."}
+
+        result = query_graph(
+            graph=graph,
+            entity_name=entity,
+            entity_type=entity_type,
+            video_id=video_id,
+            max_depth=max_depth,
+        )
+
+        return {
+            "entities": [
+                {
+                    "name": e.name,
+                    "type": e.entity_type,
+                    "description": e.description,
+                    "frequency": e.frequency,
+                    "source_videos": e.source_videos,
+                }
+                for e in result["entities"][:50]
+            ],
+            "relationships": [
+                {
+                    "source": r.source_id,
+                    "target": r.target_id,
+                    "type": r.relation_type,
+                    "weight": r.weight,
+                }
+                for r in result["relationships"][:50]
+            ],
+            "cross_references": [
+                {
+                    "source_video": cr.source_video,
+                    "target_video": cr.target_video,
+                    "shared_entities": cr.shared_entities,
+                    "similarity": cr.similarity_score,
+                }
+                for cr in result["cross_references"][:20]
+            ],
+            "connected_entities": result["connected_entity_count"],
+        }
+
+    except Exception as e:
+        logger.error(f"Knowledge graph query failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Query failed: {e}")
 
 
 if __name__ == "__main__":
