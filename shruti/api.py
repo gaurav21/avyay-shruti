@@ -32,6 +32,11 @@ from .models import (
     SegmentationResponse, TopicModel, ChapterModel,
     KnowledgeGraphResponse, GraphEntityModel,
     MultiModalRequest, MultiModalResponse,
+    # V3 summarization models
+    SummarizeRequest, SummarizeResponse,
+    InsightModel, ActionItemModel, SentimentSegmentModel,
+    EnhancedChapterModel, QualityReportModel,
+    InsightSearchRequest, InsightSearchResponse,
 )
 from .transcribe import transcribe_url
 from .extract import extract_knowledge, extract_knowledge_batch
@@ -41,6 +46,11 @@ from .query import (
     get_related_topics, search_by_metadata
 )
 from .segments import segment_content, generate_youtube_chapters
+from .summarize import summarize_video, SummarizationConfig, ChapterDetectionConfig
+from .exports import (
+    export_summary_markdown, export_summary_json,
+    export_chapter_timestamps, save_insights_to_db, search_insights,
+)
 from .knowledge_graph import (
     extract_entities, extract_relationships,
     build_knowledge_graph, load_knowledge_graph,
@@ -608,6 +618,212 @@ async def query_knowledge_graph(
     except Exception as e:
         logger.error(f"Knowledge graph query failed: {e}")
         raise HTTPException(status_code=400, detail=f"Query failed: {e}")
+
+
+# ===== V3.0 Summarization Endpoints =====
+
+@app.post("/v3/summarize", response_model=SummarizeResponse)
+async def summarize_video_content(request: SummarizeRequest):
+    """Advanced video summarization with chapter detection and key insights."""
+    try:
+        logger.info(f"Summarizing video: {request.url}")
+
+        # Transcribe first
+        transcript_result = transcribe_url(request.url)
+
+        # Configure summarization
+        chapter_cfg = ChapterDetectionConfig(
+            max_chapters=request.max_chapters,
+        )
+        config = SummarizationConfig(
+            chapter_config=chapter_cfg,
+            max_insights=request.max_insights,
+            min_insight_importance=request.min_insight_importance,
+            enable_visual_integration=request.enable_visual,
+            enable_speaker_integration=request.enable_speakers,
+        )
+
+        # Run summarization
+        result = summarize_video(
+            transcript=transcript_result["transcript"],
+            video_id=transcript_result["video_id"],
+            title=transcript_result["title"],
+            segments=transcript_result.get("segments"),
+            total_duration=transcript_result.get("duration"),
+            config=config,
+        )
+
+        # Optional export
+        export_content = None
+        if request.export_format:
+            if request.export_format == "markdown":
+                export_content = export_summary_markdown(result)
+            elif request.export_format == "json":
+                export_content = export_summary_json(result)
+            elif request.export_format in ("youtube", "srt", "vtt"):
+                export_content = export_chapter_timestamps(result, format=request.export_format)
+
+        # Save insights to database
+        try:
+            cfg = get_config()
+            db_path = str(cfg.get_chroma_persist_path() / "insights_db")
+            save_insights_to_db(result, db_path)
+        except Exception as e:
+            logger.warning(f"Failed to save insights to DB: {e}")
+
+        summary = result.summary
+
+        return SummarizeResponse(
+            video_id=summary.video_id,
+            title=summary.title,
+            duration=summary.duration,
+            executive_summary=summary.executive_summary,
+            quality_score=summary.quality_score,
+            overall_sentiment=summary.overall_sentiment.value,
+            youtube_chapters=summary.youtube_chapters,
+            content_flow=summary.content_flow,
+            chapters=[
+                EnhancedChapterModel(
+                    chapter_id=ch.chapter_id,
+                    title=ch.title,
+                    start_time=ch.start_time,
+                    end_time=ch.end_time,
+                    duration=ch.duration,
+                    summary=ch.summary,
+                    sentiment=ch.sentiment.value,
+                    sentiment_score=ch.sentiment_score,
+                    has_visual_content=ch.has_visual_content,
+                    scene_change_count=ch.scene_change_count,
+                    confidence=ch.confidence,
+                    key_insight_count=len(ch.key_insights),
+                    slide_texts=ch.slide_texts,
+                )
+                for ch in summary.chapters
+            ],
+            key_insights=[
+                InsightModel(
+                    insight_id=ins.insight_id,
+                    insight_type=ins.insight_type.value,
+                    text=ins.text,
+                    start_time=ins.start_time,
+                    end_time=ins.end_time,
+                    importance_score=ins.importance_score,
+                    confidence=ins.confidence,
+                    speaker_id=ins.speaker_id,
+                    tags=ins.tags,
+                )
+                for ins in summary.key_insights
+            ],
+            action_items=[
+                ActionItemModel(
+                    action_id=item.action_id,
+                    text=item.text,
+                    priority=item.priority,
+                    start_time=item.start_time,
+                    confidence=item.confidence,
+                )
+                for item in summary.action_items
+            ],
+            top_quotes=[
+                InsightModel(
+                    insight_id=q.insight_id,
+                    insight_type=q.insight_type.value,
+                    text=q.text,
+                    start_time=q.start_time,
+                    end_time=q.end_time,
+                    importance_score=q.importance_score,
+                    confidence=q.confidence,
+                    speaker_id=q.speaker_id,
+                    tags=q.tags,
+                )
+                for q in summary.top_quotes
+            ],
+            sentiment_arc=[
+                SentimentSegmentModel(
+                    start_time=seg.start_time,
+                    end_time=seg.end_time,
+                    label=seg.label.value,
+                    score=seg.score,
+                    keywords=seg.keywords,
+                )
+                for seg in summary.sentiment_arc
+            ],
+            quality_report=QualityReportModel(
+                overall_quality_score=result.quality_report.get("overall_quality_score", 0),
+                grade=result.quality_report.get("grade", "N/A"),
+                chapter_coverage=result.quality_report.get("chapter_coverage", 0),
+                insight_count=result.quality_report.get("insight_count", 0),
+                insight_density_per_min=result.quality_report.get("insight_density_per_min", 0),
+                insight_type_diversity=result.quality_report.get("insight_type_diversity", 0),
+                sentiment_coverage=result.quality_report.get("sentiment_coverage", 0),
+                action_item_count=result.quality_report.get("action_item_count", 0),
+            ),
+            processing_time_seconds=result.processing_time_seconds,
+            export=export_content,
+        )
+
+    except Exception as e:
+        logger.error(f"Summarization failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Summarization failed: {e}")
+
+
+@app.post("/v3/insights/search", response_model=InsightSearchResponse)
+async def search_video_insights(request: InsightSearchRequest):
+    """Search the insights database across all processed videos."""
+    try:
+        cfg = get_config()
+        db_path = str(cfg.get_chroma_persist_path() / "insights_db")
+
+        results = search_insights(
+            db_path=db_path,
+            query=request.query,
+            insight_type=request.insight_type,
+            min_importance=request.min_importance,
+            video_id=request.video_id,
+            limit=request.limit,
+        )
+
+        return InsightSearchResponse(
+            results=results,
+            total_found=len(results),
+        )
+
+    except Exception as e:
+        logger.error(f"Insight search failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Insight search failed: {e}")
+
+
+@app.post("/v3/chapters/export")
+async def export_video_chapters(request: ExtractRequest, format: str = "youtube"):
+    """Export chapter timestamps in various formats (youtube, srt, vtt, ffmpeg)."""
+    try:
+        logger.info(f"Exporting chapters for: {request.url} (format={format})")
+
+        # Transcribe
+        transcript_result = transcribe_url(request.url)
+
+        # Summarize
+        result = summarize_video(
+            transcript=transcript_result["transcript"],
+            video_id=transcript_result["video_id"],
+            title=transcript_result["title"],
+            segments=transcript_result.get("segments"),
+        )
+
+        # Export
+        exported = export_chapter_timestamps(result, format=format)
+
+        return {
+            "video_id": transcript_result["video_id"],
+            "title": transcript_result["title"],
+            "format": format,
+            "chapter_count": len(result.enhanced_chapters),
+            "content": exported,
+        }
+
+    except Exception as e:
+        logger.error(f"Chapter export failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Chapter export failed: {e}")
 
 
 if __name__ == "__main__":

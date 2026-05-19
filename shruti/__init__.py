@@ -6,7 +6,7 @@ from YouTube videos in multiple languages, with special support for Sanskrit
 and Indic languages.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "Avyay AI"
 __email__ = "team@avyay.ai"
 
@@ -28,6 +28,13 @@ __all__ = [
     "analyze_speakers",
     "segment_content",
     "build_knowledge_graph",
+    # V3.0 - Advanced summarization
+    "summarize_video",
+    "extract_insights",
+    "export_summary_markdown",
+    "export_summary_json",
+    "export_chapter_timestamps",
+    "search_insights",
     "extract_entities",
 ]
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "avyay-shruti"
-version = "0.2.0"
+version = "0.3.0"
 description = "Multilingual YouTube knowledge extractor — transcribe, extract, query"
 readme = "README.md"
 license = "MIT"

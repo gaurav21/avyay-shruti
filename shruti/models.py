@@ -321,3 +321,111 @@ class MultiModalResponse(BaseModel):
     pipeline_stages: Dict[str, bool] = Field(..., description="Pipeline stage status")
     errors: List[str] = Field(default_factory=list, description="Pipeline errors")
     processing_time_seconds: float = Field(..., description="Total processing time")
+
+
+# ===== V3.0 Summarization Models =====
+
+class InsightModel(BaseModel):
+    """A single extracted insight."""
+    insight_id: str = Field(..., description="Insight identifier")
+    insight_type: str = Field(..., description="Type: key_point, action_item, question, quote, definition, statistic, emphasis, transition, conclusion")
+    text: str = Field(..., description="Insight text")
+    start_time: float = Field(..., description="Start time (seconds)")
+    end_time: float = Field(..., description="End time (seconds)")
+    importance_score: float = Field(..., description="Importance score 0-1")
+    confidence: float = Field(..., description="Detection confidence 0-1")
+    speaker_id: Optional[str] = Field(None, description="Speaker ID if identified")
+    tags: List[str] = Field(default_factory=list, description="Insight tags")
+
+
+class ActionItemModel(BaseModel):
+    """An identified action item."""
+    action_id: str = Field(..., description="Action item identifier")
+    text: str = Field(..., description="Action item text")
+    priority: str = Field("medium", description="Priority: low, medium, high")
+    start_time: float = Field(0.0, description="Start time (seconds)")
+    confidence: float = Field(0.0, description="Detection confidence")
+
+
+class SentimentSegmentModel(BaseModel):
+    """Sentiment for a video segment."""
+    start_time: float = Field(..., description="Start time (seconds)")
+    end_time: float = Field(..., description="End time (seconds)")
+    label: str = Field(..., description="Sentiment label")
+    score: float = Field(..., description="Sentiment score -1 to 1")
+    keywords: List[str] = Field(default_factory=list, description="Sentiment keywords")
+
+
+class EnhancedChapterModel(BaseModel):
+    """An enhanced chapter with multi-modal signals."""
+    chapter_id: int = Field(..., description="Chapter identifier")
+    title: str = Field(..., description="Chapter title")
+    start_time: float = Field(..., description="Start time (seconds)")
+    end_time: float = Field(..., description="End time (seconds)")
+    duration: float = Field(..., description="Duration (seconds)")
+    summary: str = Field("", description="Chapter summary")
+    sentiment: str = Field("neutral", description="Chapter sentiment")
+    sentiment_score: float = Field(0.0, description="Sentiment score")
+    has_visual_content: bool = Field(False, description="Has slide/visual content")
+    scene_change_count: int = Field(0, description="Scene changes in chapter")
+    confidence: float = Field(0.0, description="Chapter boundary confidence")
+    key_insight_count: int = Field(0, description="Number of key insights")
+    slide_texts: List[str] = Field(default_factory=list, description="OCR slide texts")
+
+
+class QualityReportModel(BaseModel):
+    """Quality metrics for summarization."""
+    overall_quality_score: float = Field(..., description="Overall quality 0-1")
+    grade: str = Field(..., description="Letter grade A-F")
+    chapter_coverage: float = Field(0.0, description="Chapter coverage ratio")
+    insight_count: int = Field(0, description="Total insights")
+    insight_density_per_min: float = Field(0.0, description="Insights per minute")
+    insight_type_diversity: float = Field(0.0, description="Type diversity ratio")
+    sentiment_coverage: float = Field(0.0, description="Sentiment coverage ratio")
+    action_item_count: int = Field(0, description="Total action items")
+
+
+class SummarizeRequest(BaseModel):
+    """Request model for video summarization."""
+    url: str = Field(..., description="YouTube video URL")
+    max_insights: int = Field(50, description="Maximum insights to extract")
+    min_insight_importance: float = Field(0.3, description="Minimum importance threshold")
+    enable_visual: bool = Field(True, description="Enable visual analysis integration")
+    enable_speakers: bool = Field(True, description="Enable speaker analysis integration")
+    max_chapters: int = Field(15, description="Maximum chapters")
+    export_format: Optional[str] = Field(None, description="Export format: markdown, json, youtube, srt, vtt")
+
+
+class SummarizeResponse(BaseModel):
+    """Response model for video summarization."""
+    video_id: str = Field(..., description="Video identifier")
+    title: str = Field(..., description="Video title")
+    duration: float = Field(..., description="Video duration (seconds)")
+    executive_summary: str = Field(..., description="Concise executive summary")
+    quality_score: float = Field(..., description="Overall quality score 0-1")
+    overall_sentiment: str = Field(..., description="Overall video sentiment")
+    youtube_chapters: str = Field("", description="YouTube-compatible chapter timestamps")
+    content_flow: List[str] = Field(default_factory=list, description="Content flow titles")
+    chapters: List[EnhancedChapterModel] = Field(..., description="Enhanced chapters")
+    key_insights: List[InsightModel] = Field(..., description="Key insights")
+    action_items: List[ActionItemModel] = Field(..., description="Action items")
+    top_quotes: List[InsightModel] = Field(..., description="Top quotable moments")
+    sentiment_arc: List[SentimentSegmentModel] = Field(..., description="Sentiment arc")
+    quality_report: QualityReportModel = Field(..., description="Quality metrics")
+    processing_time_seconds: float = Field(..., description="Processing time")
+    export: Optional[str] = Field(None, description="Exported content if format requested")
+
+
+class InsightSearchRequest(BaseModel):
+    """Request for searching insights database."""
+    query: str = Field("", description="Text search query")
+    insight_type: Optional[str] = Field(None, description="Filter by insight type")
+    min_importance: float = Field(0.0, description="Minimum importance score")
+    video_id: Optional[str] = Field(None, description="Filter by video ID")
+    limit: int = Field(50, description="Maximum results")
+
+
+class InsightSearchResponse(BaseModel):
+    """Response for insights search."""
+    results: List[Dict[str, Any]] = Field(..., description="Matching insights")
+    total_found: int = Field(..., description="Total results found")
